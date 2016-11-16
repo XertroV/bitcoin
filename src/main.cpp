@@ -2386,7 +2386,6 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
             fScriptChecks = false;
         }
     }
-    LogPrint(NULL, "Setting fScriptChecks as %d\n", fScriptChecks);
     
 
     int64_t nTime1 = GetTimeMicros(); nTimeCheck += nTime1 - nTimeStart;
