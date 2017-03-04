@@ -114,6 +114,21 @@ std::string ScriptToAsmStr(const CScript& script, const bool fAttemptSighashDeco
     return str;
 }
 
+/* sseefried: Precondition: Script must be OP_RETURN script */
+std::string ScriptNulldataPayload(const CScript& script) {
+    std::string str;
+    opcodetype opcode;
+    std::vector<unsigned char> vch;
+    CScript::const_iterator pc = script.begin();
+    bool res;
+
+    res = script.GetOp(pc, opcode, vch); // skip over OP_RETURN
+    if (!res || opcode != OP_RETURN) { return str; }
+    script.GetOp(pc, opcode, vch); // skip over size or PUSHDATA1
+    if (!res || opcode == 0) { return str; }
+    return HexStr(vch); // get the payload
+}
+
 std::string EncodeHexTx(const CTransaction& tx, const int serialFlags)
 {
     CDataStream ssTx(SER_NETWORK, PROTOCOL_VERSION | serialFlags);

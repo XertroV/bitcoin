@@ -161,6 +161,11 @@ public:
         return (nValue == -1);
     }
 
+    bool IsNulldata() const
+    {
+        return scriptPubKey.IsNulldata();
+    }
+
     CAmount GetDustThreshold(const CFeeRate &minRelayTxFee) const
     {
         // "Dust" is defined in terms of CTransaction::minRelayTxFee,
@@ -377,6 +382,16 @@ public:
     bool IsCoinBase() const
     {
         return (vin.size() == 1 && vin[0].prevout.IsNull());
+    }
+
+    bool HasNulldata() const
+    {
+        for (unsigned int i = 0; i < vout.size(); i++)
+        {
+            if (vout[i].IsNulldata())
+                return true;
+        }
+        return false;
     }
 
     friend bool operator==(const CTransaction& a, const CTransaction& b)

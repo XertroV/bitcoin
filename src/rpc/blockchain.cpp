@@ -9,6 +9,7 @@
 #include "checkpoints.h"
 #include "coins.h"
 #include "consensus/validation.h"
+#include "core_io.h"
 #include "validation.h"
 #include "policy/policy.h"
 #include "primitives/transaction.h"
@@ -631,6 +632,86 @@ UniValue getblockhash(const JSONRPCRequest& request)
 
     CBlockIndex* pblockindex = chainActive[nHeight];
     return pblockindex->GetBlockHash().GetHex();
+}
+
+UniValue blockIndexToNulldataJSON(const CBlockIndex* pblockindex)
+{
+    CBlock block;
+    if (fHavePruned && !(pblockindex->nStatus & BLOCK_HAVE_DATA) && pblockindex->nTx > 0)
+        throw JSONRPCError(RPC_INTERNAL_ERROR, "Block not available (pruned data)");
+
+    if(!ReadBlockFromDisk(block, pblockindex, Params().GetConsensus()))
+        throw JSONRPCError(RPC_INTERNAL_ERROR, "Can't read block from disk");
+
+    UniValue blockJSON(UniValue::VOBJ);
+    blockJSON.push_back(Pair("hash", pblockindex->GetBlockHash().GetHex()));
+    if (pblockindex->pprev)
+        blockJSON.push_back(Pair("previousblockhash", pblockindex->pprev->GetBlockHash().GetHex()));
+    blockJSON.push_back(Pair("height", pblockindex->nHeight));
+    blockJSON.push_back(Pair("time", block.GetBlockTime()));
+
+    UniValue allnds(UniValue::VARR);
+    for(const auto& tx : block.vtx)
+    {
+        if(tx->HasNulldata())
+        {
+            UniValue obj(UniValue::VOBJ);
+            UniValue nds(UniValue::VARR);
+            BOOST_FOREACH(const CTxOut& txout, tx->vout)
+            {
+                if (txout.IsNulldata()) {
+                    std::string payload = ScriptNulldataPayload(txout.scriptPubKey);
+                    if (!payload.empty()) {
+                      nds.push_back(payload);
+                    }
+                }
+            }
+            obj.push_back(Pair("txid", tx->GetHash().GetHex()));
+            obj.push_back(Pair("nulldatas", nds));
+            allnds.push_back(obj);
+        }
+    }
+
+    blockJSON.push_back(Pair("nulldatatxs", allnds));
+    return blockJSON;
+}
+
+UniValue getnulldatasatheight(const JSONRPCRequest& request)
+{
+    if ( request.fHelp || request.params.size() != 1 )
+        throw runtime_error(
+            "getnulldatasatheight height\n"
+            "\nReturns an Object with all nulldatas for the given block height.\n"
+            "\nArguments:\n"
+            "1. index          (numeric, required) The block height\n"
+            "\nResult:\n"
+            "{\n"
+            "  \"hash\" : \"hash\",   (string) the block hash\n"
+            "  \"time\" : 1478482199, (integer) timestamp in the block\n"
+            "  \"height\" : 0000, (integer) height of the block\n"
+            "  \"nulldatatxs\" : [, \n"
+            "    {\n"
+            "      \"txid\" : \"hash\",   (string) the transaction hash\n"
+            "      \"nulldatas\" : [      (array of strings) Hex encoded nulldatas\n"
+            "        \"00000000\",        (string) the hex encoded nulldata\n"
+            "        ...,\n"
+            "      ]\n"
+            "    }\n"
+            "  ]\n"
+            "}\n"
+            "\nExamples:\n"
+            + HelpExampleCli("getnulldatasatheight", "123456")
+            + HelpExampleRpc("getnulldatasatheight", "123456")
+        );
+
+    LOCK(cs_main);
+
+    int nHeight = request.params[0].get_int();
+    if (nHeight < 0 || nHeight > chainActive.Height()) {
+        throw JSONRPCError(RPC_INVALID_PARAMETER, "Block height out of range");
+    }
+    CBlockIndex* pblockindex = chainActive[nHeight];
+    return blockIndexToNulldataJSON(pblockindex);
 }
 
 UniValue getblockheader(const JSONRPCRequest& request)
@@ -1435,6 +1516,7 @@ static const CRPCCommand commands[] =
     { "blockchain",         "getmempooldescendants",  &getmempooldescendants,  true,  {"txid","verbose"} },
     { "blockchain",         "getmempoolentry",        &getmempoolentry,        true,  {"txid"} },
     { "blockchain",         "getmempoolinfo",         &getmempoolinfo,         true,  {} },
+    { "blockchain",         "getnulldatasatheight",   &getnulldatasatheight,   true,  {"height"} },
     { "blockchain",         "getrawmempool",          &getrawmempool,          true,  {"verbose"} },
     { "blockchain",         "gettxout",               &gettxout,               true,  {"txid","n","include_mempool"} },
     { "blockchain",         "gettxoutsetinfo",        &gettxoutsetinfo,        true,  {} },
